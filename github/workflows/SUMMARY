@@ -1,0 +1,596 @@
+---
+File: .github/workflows/1_update_and_enrich.yml
+---
+name: 1) Process Updates + Enrichments
+
+on:
+  workflow_dispatch:
+  issues:
+    types: [reopened]
+    
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  hydrate-arxiv:
+    runs-on: ubuntu-latest
+    if: >
+      contains(join(github.event.issue.labels.*.name, ','), 'TODO:hydrate-metadata') ||
+      github.event_name == 'workflow_dispatch'
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: pip install gh-store>=0.11.2 arxiv
+
+      - name: Process Updates
+        run: |
+          python scripts/hydrate_metadata.py \
+            hydrate_all_open_issues \
+            --repo ${{ github.repository }} \
+            --token ${{ secrets.GITHUB_TOKEN }}
+
+  process-updates:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.issue.labels.*.name, 'TODO:hydrate-metadata') && contains(github.event.issue.labels.*.name, 'stored-object')"
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: pip install gh-store>=0.11.2
+          
+      - name: Process Updates
+        run: |
+          python -m gh_store process-updates \
+            --issue ${{ github.event.issue.number }} \
+            --token ${{ secrets.GITHUB_TOKEN }} \
+            --repo ${{ github.repository }}
+
+  notify-deploy-after-process:
+    needs: [process-updates]
+    if: contains(join(github.event.issue.labels.*.name, ','), 'stored-object')
+    runs-on: ubuntu-latest
+    steps:
+          
+      - name: Trigger frontend deploy
+        run: |
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/2_deploy-frontend.yml/dispatches \
+            -d "{\"ref\":\"${{ github.ref }}\"}"
+
+  notify-deploy-after-enrichment:
+    needs: [hydrate-arxiv]
+    if: contains(join(github.event.issue.labels.*.name, ','), 'stored-object')
+    runs-on: ubuntu-latest
+    steps:
+          
+      - name: Trigger frontend deploy
+        run: |
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/2_deploy-frontend.yml/dispatches \
+            -d "{\"ref\":\"${{ github.ref }}\"}"
+
+
+
+---
+File: .github/workflows/2_deploy-frontend.yml
+---
+name: Deploy Frontend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'data/papers/gh-store-snapshot.json'
+      - 'frontend/*'
+      - '.github/workflows/2_deploy-frontend.yml'
+
+concurrency:
+  group: store-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: read
+
+jobs:
+  update-snapshot:
+    runs-on: ubuntu-latest
+    outputs:
+      changes_detected: ${{ steps.commit-changes.outputs.changes_detected }}
+    steps:
+      - name: Wait for updates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            while (true) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: '1_store-sync.yml',
+              });
+              
+              const activeUpdates = runs.data.workflow_runs.filter(run => 
+                (run.status === 'in_progress' || run.status === 'queued')
+              );
+              
+              if (activeUpdates.length === 0) break;
+              console.log(`Waiting for ${activeUpdates.length} active updates to complete...`);
+              await new Promise(r => setTimeout(r, 10000));
+            }
+
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: pip install gh-store
+
+      - name: Update snapshot
+        env:
+          SNAPSHOT_PATH: data/papers/gh-store-snapshot.json
+        run: |
+          mkdir -p $(dirname ${{ env.SNAPSHOT_PATH }})
+          python -m gh_store update-snapshot \
+            --token ${{ secrets.GITHUB_TOKEN }} \
+            --repo ${{ github.repository }} \
+            --snapshot-path ${{ env.SNAPSHOT_PATH }}
+      
+      # - name: Convert data
+      #   run: |
+      #     python frontend/scripts/convert_store.py \
+      #       --snapshot_path data/papers/gh-store-snapshot.json \
+      #       --output_path data/papers/papers.json \
+      #       --archive_path data/papers/papers-archive.json \
+      #       --features_base data/papers
+
+      - name: Upload papers data
+        uses: actions/upload-artifact@v4
+        with:
+          name: papers-json
+          path: data/papers/gh-store-snapshot.json
+
+      - name: Commit changes
+        id: commit-changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: Update store snapshot [${{ github.run_id }}]"
+          file_pattern: 'data/papers/**'
+      
+  deploy:
+    needs: update-snapshot
+    if: github.event_name == 'workflow_dispatch' || needs.update-snapshot.outputs.changes_detected == 'true'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Download papers.json
+        uses: actions/download-artifact@v4
+        with:
+          name: papers-json
+          path: web/
+
+      - name: Build web directory
+        run: |
+          cp frontend/* web/
+          
+          # Copy paper features maintaining directory structure
+          cd data
+          if [ -d "papers" ]; then
+            # Create papers directory in web/data
+            mkdir -p ../web/data/papers
+            
+            # Find all markdown files under papers/*/features
+            # and copy them maintaining directory structure
+            find papers -type f -name "*.md" -path "*/features/*" -exec cp --parents {} ../web/data/ \;
+          fi
+          cd ..
+
+      - name: Get git info
+        id: git-info
+        run: |
+          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "repo=${GITHUB_REPOSITORY}" >> $GITHUB_OUTPUT
+
+      - name: Create git info JSON
+        run: |
+          echo "{\"branch\": \"${{ steps.git-info.outputs.branch }}\", \"commit\": \"${{ steps.git-info.outputs.commit }}\", \"repo\": \"${{ steps.git-info.outputs.repo }}\"}" > web/data/git-info.json
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web
+          force_orphan: true
+
+
+
+---
+File: .github/workflows/build-extension.yml
+---
+# .github/workflows/build-extension.yml
+name: Build Extension
+
+on:
+  push:
+    paths:
+      - 'extension/**'
+      - '.github/workflows/build-extension.yml'
+    branches: [ main, ext-use-gh-store ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Generate package-lock.json if it doesn't exist
+    # - name: Initialize npm
+    #   run: |
+    #     if [ ! -f "package-lock.json" ]; then
+    #       npm install --package-lock-only --no-audit
+    #     else
+    #       echo "package-lock.json exists"
+    #     fi
+    
+    # Regenerate package-lock.json to ensure it matches package.json
+    - name: Regenerate package-lock.json
+      run: |
+        if [ -f "package-lock.json" ]; then
+          rm -f package-lock.json
+        fi
+        npm install --package-lock-only --no-audit
+
+    - name: Flush old build
+      run: rm -rf dist/
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        #cache: 'npm'
+        #cache-dependency-path: './extension/package-lock.json'
+        
+    - name: Install dependencies
+      #run: npm ci --prefer-offline
+      run: npm install --prefer-offline
+        
+      
+    - name: Show environment info
+      run: |
+        echo "Node version:"
+        node --version
+        echo "NPM version:"
+        npm --version
+        echo "Directory structure:"
+        ls -R
+        echo "package.json contents:"
+        cat package.json
+        
+    - name: Type check
+      run: npm run type-check
+        
+    - name: Build extension
+      run: |
+        set -ex
+        npm run build
+        echo "Build output:"
+        ls -la dist/
+
+    # Debug output
+    - name: Show build results
+      if: always()
+      run: |
+        echo "Current directory:"
+        pwd
+        echo "Directory contents:"
+        ls -lha
+        echo "Dist directory contents (if exists):"
+        ls -lha dist/ || echo "No dist directory"
+        echo "Error logs (if any):"
+        find . -name "*.log" -exec cat {} \;
+
+    # Commit the built files
+    - name: Commit bundled files
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "chore: Update extension bundles"
+        file_pattern: "extension/dist/*"
+        #branch: ${{ github.ref }}
+
+
+
+---
+File: .github/workflows/deduplicate-ghstore.yml
+---
+# .github/workflows/deduplicate.yml
+# Workflow to automatically find and deduplicate objects in gh-store
+
+
+name: Deduplicate GH-Store Objects
+
+on:
+  # schedule:
+  #   - cron: '0 2 * * *' # Run daily at 2:00 UTC
+  # push:
+  #   branches: [ canonicalizer-newlabels ]
+  #   paths: [ ".github/workflows/deduplicate.yml" ]
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no changes)'
+        type: boolean
+        default: true
+      specific_object:
+        description: 'Process specific object ID only (leave blank for all)'
+        type: string
+        required: false
+
+jobs:
+  deduplicate:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write  # Needed to modify issues
+      contents: read  # Needed to read code
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install gh-store
+      
+      - name: Run deduplication tool
+        id: deduplicate
+        run: |
+          echo "Running deduplication process..."
+          
+          # Set up basic command
+          CMD="python -m gh_store.tools.canonicalize --token ${{ secrets.GITHUB_TOKEN }} --repo ${{ github.repository }}"
+          
+          # Check if dry run
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            CMD="$CMD --dry-run"
+            echo "::notice::Running in dry-run mode - no changes will be made"
+          fi
+          
+          # Check if specific object requested
+          if [[ "${{ github.event.inputs.specific_object }}" != "" ]]; then
+            OBJECT_ID="${{ github.event.inputs.specific_object }}"
+            CMD="$CMD --object-id $OBJECT_ID"
+            echo "::notice::Processing specific object: $OBJECT_ID"
+          fi
+          
+          # First find duplicates and capture output
+          echo "Finding duplicates..."
+          FIND_OUTPUT=$(eval "$CMD --find-duplicates" 2>&1)
+          echo "$FIND_OUTPUT"
+          
+          # Check if duplicates found
+          if [[ "$FIND_OUTPUT" == *"No duplicate objects found"* ]]; then
+            echo "::notice::No duplicate objects found!"
+            echo "duplicates_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "duplicates_found=true" >> $GITHUB_OUTPUT
+          fi
+          
+          # Process duplicates
+          echo "Processing duplicates..."
+          DEDUP_OUTPUT=$(eval "$CMD --deduplicate" 2>&1)
+          echo "$DEDUP_OUTPUT"
+          
+          # Extract metrics
+          OBJECTS_PROCESSED=$(echo "$DEDUP_OUTPUT" | grep -o "Processed [0-9]* objects" | grep -o "[0-9]*")
+          if [[ -z "$OBJECTS_PROCESSED" ]]; then
+            OBJECTS_PROCESSED=0
+          fi
+          
+          echo "objects_processed=$OBJECTS_PROCESSED" >> $GITHUB_OUTPUT
+      
+      - name: Create summary
+        if: steps.deduplicate.outputs.duplicates_found == 'true'
+        run: |
+          echo "# Deduplication Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "**DRY RUN** - No changes were made" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "Found duplicates for ${{ steps.deduplicate.outputs.objects_processed }} objects" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The deduplication process:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Identified objects with multiple issues" >> $GITHUB_STEP_SUMMARY
+          echo "2. Selected the oldest issue as canonical for each object" >> $GITHUB_STEP_SUMMARY
+          echo "3. Marked other issues as deprecated duplicates" >> $GITHUB_STEP_SUMMARY
+          echo "4. Processed virtual merges to ensure data consistency" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Handle no duplicates
+        if: steps.deduplicate.outputs.duplicates_found == 'false'
+        run: |
+          echo "# Deduplication Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ No duplicate objects found in the repository." >> $GITHUB_STEP_SUMMARY
+
+
+
+---
+File: .github/workflows/ghstore-process-bulk.yml
+---
+# .github/workflows/ghstore-process-bulk.yml
+name: Process Bulk Object Updates
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Label to process (default: stored-object)'
+        required: true
+        type: string
+        default: 'stored-object'
+
+jobs:
+  process-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write 
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install gh-store rich loguru
+
+      - name: Process Updates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          LABEL: ${{ inputs.label }}
+        run: |
+          python - << 'EOF'
+          import os
+          from github import Github
+          from gh_store.__main__ import CLI
+          from loguru import logger
+          from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+
+          # Initialize GitHub client
+          g = Github(os.environ["GITHUB_TOKEN"])
+          repo = g.get_repo(os.environ["REPO"])
+          label = os.environ["LABEL"]
+
+          # Get all open issues with the specified label
+          logger.info(f"Finding open issues with label: {label}")
+          open_issues = list(repo.get_issues(state="open", labels=[label]))
+
+          if not open_issues:
+              logger.warning("No open issues found with specified label")
+              exit(0)
+
+          logger.info(f"Found {len(open_issues)} issues to process")
+
+          # Initialize CLI
+          cli = CLI()
+
+          # Create progress bar
+          with Progress(
+              SpinnerColumn(),
+              TextColumn("[bold blue]{task.description}"),
+              BarColumn(),
+              TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+          ) as progress:
+              process_task = progress.add_task(
+                  "Processing issues...",
+                  total=len(open_issues)
+              )
+
+              for issue in open_issues:
+                  logger.info(f"Processing issue #{issue.number}")
+                  cli.process_updates(
+                      issue=issue.number,
+                      token=os.environ["GITHUB_TOKEN"],
+                      repo=os.environ["REPO"]
+                  )
+                  progress.update(process_task, advance=1)
+
+          logger.info("Bulk processing completed")
+          EOF
+
+
+
+---
+File: .github/workflows/llamero-summarize.yaml
+---
+name: Llamero Summarization
+
+on:
+  # push:
+  #   branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  generate-summaries:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Install llamero
+      run: touch requirements.txt
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        #cache: 'pip'
+
+    - name: Install llamero
+      run: pip install llamero
+
+    - name: Generate summaries
+      run: |
+        llamero summarize all
+        #llamero tree --output summaries/tree.md
+
+
