@@ -185,6 +185,7 @@ function setupMessageListeners() {
 // Handle source identification for URL
 function handleIdentifySource(url: string, sendResponse: (response: any) => void) {
   if (!sourceManager) {
+    logger.error('Source manager not initialized');
     sendResponse({ 
       success: false, 
       error: 'Source manager not initialized'
@@ -192,17 +193,37 @@ function handleIdentifySource(url: string, sendResponse: (response: any) => void
     return;
   }
   
+  logger.debug(`Trying to identify source for URL: ${url}`);
+  
   try {
+    // Log all sources and their patterns for debugging
+    const sources = sourceManager.getAllSources();
+    logger.debug(`Available sources: ${sources.map(s => s.id).join(', ')}`);
+    
+    // Test each source against the URL for debugging
+    for (const source of sources) {
+      logger.debug(`Testing source ${source.id} against URL: ${url}`);
+      const canHandle = source.canHandleUrl(url);
+      logger.debug(`Source ${source.id} can handle URL: ${canHandle}`);
+      
+      if (canHandle) {
+        const paperId = source.extractPaperId(url);
+        logger.debug(`Source ${source.id} extracted paper ID: ${paperId}`);
+      }
+    }
+    
     // Get paper ID from URL
     const result = sourceManager.extractPaperId(url);
     
     if (result) {
+      logger.info(`Identified source for URL: ${url} as ${result.sourceId} with ID ${result.paperId}`);
       sendResponse({
         success: true,
         sourceId: result.sourceId,
         paperId: result.paperId
       });
     } else {
+      logger.warn(`No matching source pattern for URL: ${url}`);
       sendResponse({
         success: false,
         error: 'No matching source pattern for URL'
