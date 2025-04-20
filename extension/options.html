@@ -8,7 +8,7 @@
       font-family: system-ui, -apple-system, sans-serif;
     }
     .container {
-      max-width: 600px;
+      max-width: 800px;
       margin: 0 auto;
     }
     .field {
@@ -26,15 +26,6 @@
       border: 1px solid #ddd;
       border-radius: 4px;
       font-family: monospace;
-    }
-    textarea {
-      width: 100%;
-      min-height: 150px;
-      padding: 8px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-family: monospace;
-      resize: vertical;
     }
     .help-text {
       font-size: 0.9em;
@@ -76,30 +67,63 @@
       padding-bottom: 8px;
       border-bottom: 1px solid #eee;
     }
-    .pattern-container {
-      border: 1px solid #eee;
-      border-radius: 4px;
-      padding: 16px;
-      margin-bottom: 16px;
-      background: #fafafa;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
     }
-    .pattern-container[data-existing="true"] {
-      border-left: 3px solid #0366d6;
+    th, td {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      text-align: left;
     }
-    .pattern-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
+    th {
+      background-color: #f5f5f5;
+      font-weight: 600;
     }
-    .pattern-actions button {
-      margin-top: 8px;
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    tr:hover {
+      background-color: #f0f0f0;
+    }
+    .action-btn {
+      background: #f5f5f5;
+      color: #333;
+      border: 1px solid #ddd;
       padding: 4px 8px;
+      border-radius: 3px;
+      cursor: pointer;
       font-size: 0.9em;
     }
-    .add-pattern {
-      margin-top: 8px;
+    .pattern-form {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f9f9f9;
+    }
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .form-group {
+      flex: 1;
+      min-width: 200px;
+    }
+    .form-buttons {
       display: flex;
       justify-content: flex-end;
+      gap: 10px;
+    }
+    .no-patterns {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+      background: #f5f5f5;
+      border-radius: 4px;
     }
     .actions {
       display: flex;
@@ -117,36 +141,6 @@
     }
     .import-export button:hover {
       background: #e5e5e5;
-    }
-    .no-patterns {
-      text-align: center;
-      padding: 20px;
-      background: #f9f9f9;
-      border-radius: 4px;
-      color: #666;
-    }
-    .validation-info {
-      display: flex;
-      margin-top: 8px;
-    }
-    .validation-info .test-button {
-      margin: 0;
-      margin-left: 8px;
-      padding: 4px 8px;
-      font-size: 0.9em;
-      background: #f5f5f5;
-      color: #333;
-      border: 1px solid #ddd;
-    }
-    .validation-result {
-      margin-top: 8px;
-      font-size: 0.9em;
-    }
-    .validation-result.valid {
-      color: #006600;
-    }
-    .validation-result.invalid {
-      color: #660000;
     }
   </style>
 </head>
@@ -176,25 +170,62 @@
       <div class="section-title">Paper URL Patterns</div>
       <div class="help-text">
         Define URL patterns for paper sources. The extension will identify papers based on these patterns.
-        Each pattern needs:
-        <ul>
-          <li>Source ID: A short unique identifier for the source (e.g., arxiv, nature)</li>
-          <li>Source Name: Display name for the source</li>
-          <li>URL Pattern: A regular expression to match against URLs</li>
-          <li>Paper ID Regex: A regex with a capture group to extract the paper ID from the URL</li>
-        </ul>
       </div>
       
-      <div id="patterns-container">
-        <!-- Pattern templates will be added here dynamically -->
-      </div>
+      <!-- Table to display existing patterns -->
+      <table id="patterns-table">
+        <thead>
+          <tr>
+            <th>Source ID</th>
+            <th>Source Name</th>
+            <th>URL Pattern</th>
+            <th>Paper ID Regex</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="patterns-tbody">
+          <!-- Pattern rows will be added here dynamically -->
+        </tbody>
+      </table>
       
       <div id="no-patterns" class="no-patterns" style="display: none;">
-        No source patterns defined. Click "Add URL Pattern" to create one.
+        No source patterns defined yet. Add your first pattern below.
       </div>
       
-      <div class="add-pattern">
-        <button id="add-pattern">Add URL Pattern</button>
+      <!-- Simple form to add/edit patterns -->
+      <div class="pattern-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="sourceId">Source ID</label>
+            <input type="text" id="sourceId" placeholder="e.g., arxiv, nature">
+            <div class="help-text">A short unique identifier</div>
+          </div>
+          
+          <div class="form-group">
+            <label for="sourceName">Source Name</label>
+            <input type="text" id="sourceName" placeholder="e.g., arXiv, Nature">
+            <div class="help-text">Display name</div>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="urlPattern">URL Pattern</label>
+            <input type="text" id="urlPattern" placeholder="e.g., arxiv\.org\/abs\/\d+\.\d+">
+            <div class="help-text">Regular expression to match URLs</div>
+          </div>
+          
+          <div class="form-group">
+            <label for="idRegex">Paper ID Regex</label>
+            <input type="text" id="idRegex" placeholder="e.g., arxiv\.org\/abs\/(\d+\.\d+)">
+            <div class="help-text">Regex with capture group to extract paper ID</div>
+          </div>
+        </div>
+        
+        <div class="form-buttons">
+          <button id="test-pattern" class="action-btn">Test Pattern</button>
+          <button id="add-pattern">Add Pattern</button>
+        </div>
       </div>
     </div>
 
@@ -209,49 +240,6 @@
     
     <div id="status" class="status"></div>
   </div>
-
-  <!-- Template for URL pattern -->
-  <template id="pattern-template">
-    <div class="pattern-container" data-index="$INDEX">
-      <div class="field">
-        <label for="sourceId-$INDEX">Source ID</label>
-        <input type="text" id="sourceId-$INDEX" placeholder="e.g., arxiv, nature">
-        <div class="help-text">A short unique identifier for this source</div>
-      </div>
-      
-      <div class="field">
-        <label for="sourceName-$INDEX">Source Name</label>
-        <input type="text" id="sourceName-$INDEX" placeholder="e.g., arXiv, Nature">
-        <div class="help-text">Display name for this source</div>
-      </div>
-      
-      <div class="field">
-        <label for="urlPattern-$INDEX">URL Pattern</label>
-        <input type="text" id="urlPattern-$INDEX" placeholder="e.g., arxiv\.org\/abs\/\d+\.\d+">
-        <div class="help-text">Regular expression to match paper URLs from this source</div>
-        <div class="validation-info">
-          <span>Test your pattern:</span>
-          <button class="test-button test-url-pattern">Test</button>
-        </div>
-        <div class="validation-result url-pattern-result"></div>
-      </div>
-      
-      <div class="field">
-        <label for="idRegex-$INDEX">Paper ID Regex</label>
-        <input type="text" id="idRegex-$INDEX" placeholder="e.g., arxiv\.org\/abs\/(\d+\.\d+)">
-        <div class="help-text">Regular expression with capture group to extract paper ID from the URL</div>
-        <div class="validation-info">
-          <span>Test your regex:</span>
-          <button class="test-button test-id-regex">Test</button>
-        </div>
-        <div class="validation-result id-regex-result"></div>
-      </div>
-      
-      <div class="pattern-actions">
-        <button class="remove-pattern">Remove</button>
-      </div>
-    </div>
-  </template>
 
   <script type="module" src="dist/options.bundle.js"></script>
 </body>
