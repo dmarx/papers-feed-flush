@@ -359,7 +359,7 @@ async function handleManualPaperLog(metadata: PaperMetadata): Promise<void> {
   }
 }
 
-// Listen for credential and pattern changes
+// Modify the storage change handler to properly reload patterns
 chrome.storage.onChanged.addListener(async (changes) => {
   logger.debug('Storage changes detected', Object.keys(changes));
   
@@ -372,8 +372,14 @@ chrome.storage.onChanged.addListener(async (changes) => {
   
   // Reload source patterns if they changed
   if (changes.sourcePatterns && sourceManager) {
-    await sourceManager.handleStorageChanges(changes);
-    logger.info('Source patterns updated');
+    logger.info('Source patterns changed, reloading patterns');
+    // Force reload patterns from storage
+    await sourceManager.loadPatternsFromStorage();
+    logger.info('Source patterns reloaded successfully');
+    
+    // Log the current sources to help debugging
+    const sources = sourceManager.getAllSources();
+    logger.info(`Current registered sources: ${sources.map(s => s.id).join(', ')}`);
   }
   
   // Reinitialize paper manager if credentials changed
