@@ -47,13 +47,19 @@ async function loadSettingsIntoForm(): Promise<void> {
     }
     
     if (settings.githubToken) {
-      // Just set the placeholder to indicate a token is set
-      (document.getElementById('token') as HTMLInputElement).placeholder = '••••••••••••••••••••••';
+      // If token exists in storage but not in the input field, it means we're loading the page
+      const tokenInput = document.getElementById('token') as HTMLInputElement;
+      
+      if (tokenInput.value === '' && settings.githubToken) {
+        // Just set the placeholder to indicate a token is set
+        tokenInput.placeholder = '••••••••••••••••••••••';
+      }
     }
     
     // Set patterns JSON
     const patternsElem = document.getElementById('patterns') as HTMLTextAreaElement;
     if (patternsElem) {
+      // Always populate with current patterns from storage or defaults
       patternsElem.value = JSON.stringify(settings.sourcePatterns, null, 2);
     }
     
@@ -68,7 +74,20 @@ async function saveSettingsFromForm(): Promise<void> {
   try {
     // Get GitHub settings
     const githubRepo = (document.getElementById('repo') as HTMLInputElement).value.trim();
-    const githubToken = (document.getElementById('token') as HTMLInputElement).value.trim();
+    
+    // For the token, we need to handle the case where it's not changed
+    let githubToken;
+    const tokenInput = document.getElementById('token') as HTMLInputElement;
+    const tokenValue = tokenInput.value.trim();
+    
+    if (tokenValue === '' && tokenInput.placeholder === '••••••••••••••••••••••') {
+      // Token input is empty but placeholder shows a token exists - keep existing token
+      const existingSettings = await loadSettings();
+      githubToken = existingSettings.githubToken;
+    } else {
+      // Use new token value (which might be empty to clear the token)
+      githubToken = tokenValue;
+    }
     
     // Get patterns JSON
     const patternsText = (document.getElementById('patterns') as HTMLTextAreaElement).value.trim();
