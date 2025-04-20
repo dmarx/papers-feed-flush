@@ -9,26 +9,37 @@ const logger = loguru.getLogger('custom-source');
 
 /**
  * Source integration that uses user-defined patterns
+ * We need to create a class that extends BaseSourceIntegration but allows
+ * modifying the properties that are read-only in the base class
  */
 export class CustomSourceIntegration extends BaseSourceIntegration {
+  // Store the pattern strings
+  private readonly _urlPatternString: string;
+  private readonly _idRegexString: string;
+  
   // Override the default properties with custom values
   constructor(
-    id: string,
-    name: string,
+    sourceId: string,
+    sourceName: string,
     urlPatternString: string,
-    private idRegexString: string
+    idRegexString: string
   ) {
     super();
-    this.id = id;
-    this.name = name;
     
-    // Create RegExp from string patterns
-    this.urlPatterns = [new RegExp(urlPatternString, 'i')];
+    // Store our pattern strings
+    this._urlPatternString = urlPatternString;
+    this._idRegexString = idRegexString;
     
-    // Content script matches for all URLs
-    this.contentScriptMatches = ['<all_urls>'];
+    // Create a new object to bypass readonly properties
+    // We need to use Object.defineProperties to set readonly properties
+    Object.defineProperties(this, {
+      id: { value: sourceId },
+      name: { value: sourceName },
+      urlPatterns: { value: [new RegExp(urlPatternString, 'i')] },
+      contentScriptMatches: { value: ['<all_urls>'] }
+    });
     
-    logger.debug(`Created custom source: ${id} with pattern: ${urlPatternString}`);
+    logger.debug(`Created custom source: ${sourceId} with pattern: ${urlPatternString}`);
   }
   
   /**
@@ -36,7 +47,7 @@ export class CustomSourceIntegration extends BaseSourceIntegration {
    */
   override extractPaperId(url: string): string | null {
     try {
-      const idRegex = new RegExp(this.idRegexString, 'i');
+      const idRegex = new RegExp(this._idRegexString, 'i');
       const match = url.match(idRegex);
       
       if (match && match.length > 1) {
