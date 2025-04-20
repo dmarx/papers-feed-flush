@@ -60,8 +60,9 @@ function setFormValues(settings: Settings): void {
 function refreshPatternsTable(): void {
   const tbody = document.getElementById('patterns-tbody');
   const noPatterns = document.getElementById('no-patterns');
+  const patternsTable = document.getElementById('patterns-table');
   
-  if (!tbody || !noPatterns) return;
+  if (!tbody || !noPatterns || !patternsTable) return;
   
   // Clear the table
   tbody.innerHTML = '';
@@ -69,10 +70,10 @@ function refreshPatternsTable(): void {
   // Show/hide "no patterns" message
   if (currentPatterns.length === 0) {
     noPatterns.style.display = 'block';
-    document.getElementById('patterns-table')!.style.display = 'none';
+    patternsTable.style.display = 'none';
   } else {
     noPatterns.style.display = 'none';
-    document.getElementById('patterns-table')!.style.display = 'table';
+    patternsTable.style.display = 'table';
     
     // Add each pattern to the table
     currentPatterns.forEach((pattern, index) => {
@@ -105,7 +106,10 @@ function refreshPatternsTable(): void {
       const editButton = document.createElement('button');
       editButton.className = 'action-btn';
       editButton.textContent = 'Edit';
-      editButton.addEventListener('click', () => editPattern(index));
+      editButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent any form submission
+        editPattern(index);
+      });
       actionsCell.appendChild(editButton);
       
       // Space
@@ -115,7 +119,10 @@ function refreshPatternsTable(): void {
       const removeButton = document.createElement('button');
       removeButton.className = 'action-btn';
       removeButton.textContent = 'Remove';
-      removeButton.addEventListener('click', () => removePattern(index));
+      removeButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent any form submission
+        removePattern(index);
+      });
       actionsCell.appendChild(removeButton);
       
       row.appendChild(actionsCell);
@@ -148,13 +155,21 @@ function editPattern(index: number): void {
 // Function to remove a pattern
 function removePattern(index: number): void {
   if (confirm(`Are you sure you want to remove "${currentPatterns[index].name}"?`)) {
+    // Remove the pattern from the array
     currentPatterns.splice(index, 1);
+    
+    // Refresh the table
     refreshPatternsTable();
     
     // Clear form if we were editing this pattern
     if (editingIndex === index) {
       clearPatternForm();
+    } else if (editingIndex !== null && editingIndex > index) {
+      // Adjust editingIndex when a pattern before the current one is removed
+      editingIndex--;
     }
+    
+    showStatus(`Pattern removed successfully`);
   }
 }
 
@@ -239,62 +254,6 @@ function clearPatternForm(): void {
   const addButton = document.getElementById('add-pattern');
   if (addButton) {
     addButton.textContent = 'Add Pattern';
-  }
-}
-
-// Test the current pattern
-function testPattern(): void {
-  // Get values from form
-  const urlPattern = (document.getElementById('urlPattern') as HTMLInputElement).value.trim();
-  const idRegex = (document.getElementById('idRegex') as HTMLInputElement).value.trim();
-  
-  if (!urlPattern || !idRegex) {
-    showStatus('URL Pattern and Paper ID Regex are required for testing', true);
-    return;
-  }
-  
-  // Create RegExp objects
-  try {
-    new RegExp(urlPattern);
-    new RegExp(idRegex);
-  } catch (e) {
-    showStatus(`Invalid regular expression: ${e instanceof Error ? e.message : 'Unknown error'}`, true);
-    return;
-  }
-  
-  // Prompt for test URL
-  const testUrl = prompt('Enter a URL to test your patterns:');
-  if (!testUrl) return;
-  
-  // Test URL pattern
-  let urlMatch: boolean;
-  try {
-    const urlRegex = new RegExp(urlPattern);
-    urlMatch = urlRegex.test(testUrl);
-  } catch (e) {
-    showStatus(`Error testing URL pattern: ${e instanceof Error ? e.message : 'Unknown error'}`, true);
-    return;
-  }
-  
-  if (!urlMatch) {
-    showStatus(`URL does not match the URL pattern`, true);
-    return;
-  }
-  
-  // Test ID pattern
-  try {
-    const regex = new RegExp(idRegex);
-    const match = testUrl.match(regex);
-    
-    if (match && match.length > 1) {
-      showStatus(`Success! Extracted paper ID: "${match[1]}"`);
-    } else if (match) {
-      showStatus(`URL matches pattern but no capture group found. Add parentheses around the ID part.`, true);
-    } else {
-      showStatus(`URL does not match the Paper ID pattern`, true);
-    }
-  } catch (e) {
-    showStatus(`Error testing Paper ID pattern: ${e instanceof Error ? e.message : 'Unknown error'}`, true);
   }
 }
 
@@ -493,19 +452,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Set up add/edit pattern button
     const addButton = document.getElementById('add-pattern');
     if (addButton) {
-      addButton.addEventListener('click', addOrUpdatePattern);
-    }
-    
-    // Set up test pattern button
-    const testButton = document.getElementById('test-pattern');
-    if (testButton) {
-      testButton.addEventListener('click', testPattern);
+      addButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent any form submission
+        addOrUpdatePattern();
+      });
     }
 
     // Add save button handler
     const saveButton = document.getElementById('save');
     if (saveButton) {
-      saveButton.addEventListener('click', async () => {
+      saveButton.addEventListener('click', async (e) => {
+        e.preventDefault(); // Prevent any form submission
         try {
           const settings = getFormValues();
           await validateSettings(settings);
@@ -520,12 +477,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Add export/import buttons
     const exportButton = document.getElementById('export-settings');
     if (exportButton) {
-      exportButton.addEventListener('click', exportSettings);
+      exportButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent any form submission
+        exportSettings();
+      });
     }
     
     const importButton = document.getElementById('import-settings');
     if (importButton) {
-      importButton.addEventListener('click', importSettings);
+      importButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent any form submission
+        importSettings();
+      });
     }
   } catch (error) {
     showStatus(`Error loading settings: ${error instanceof Error ? error.message : 'Unknown error'}`, true);
