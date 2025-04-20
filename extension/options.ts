@@ -243,7 +243,7 @@ function getFormValues(): Settings {
   const sourcePatterns: SourcePattern[] = [];
   
   patternContainers.forEach((container) => {
-    const index = container.dataset.index;
+    const index = (container as HTMLElement).dataset.index;
     if (!index) return;
     
     const sourceId = (document.getElementById(`sourceId-${index}`) as HTMLInputElement).value.trim();
