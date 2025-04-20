@@ -26,6 +26,9 @@ export class ExtendedSourceManager extends SourceIntegrationManager {
   // Track which sources are custom (user-defined)
   private customSourceIds: Set<string> = new Set();
   
+  // We need to maintain our own map of sources since we can't access the private property
+  private customSources: Map<string, SourceIntegration> = new Map();
+  
   constructor(defaultPatterns: SourcePattern[] = []) {
     super();
     this.defaultPatterns = defaultPatterns;
@@ -63,9 +66,11 @@ export class ExtendedSourceManager extends SourceIntegrationManager {
    * Clear all custom sources
    */
   clearCustomSources(): void {
-    // Remove all custom sources from registry
+    // Unregister all custom sources
     for (const sourceId of this.customSourceIds) {
-      this.sources.delete(sourceId);
+      this.customSources.delete(sourceId);
+      // We can't directly remove from the parent's private sources map,
+      // but we can override it with a null handler in the next step
       logger.debug(`Removed custom source: ${sourceId}`);
     }
     
@@ -88,6 +93,7 @@ export class ExtendedSourceManager extends SourceIntegrationManager {
       
       // Track this as a custom source
       this.customSourceIds.add(pattern.id);
+      this.customSources.set(pattern.id, source);
       
       // Register the source
       this.registerSource(source);
@@ -115,5 +121,21 @@ export class ExtendedSourceManager extends SourceIntegrationManager {
       
       logger.info(`Updated ${patterns.length} source patterns`);
     }
+  }
+  
+  /**
+   * Override getAllSources to combine built-in and custom sources
+   */
+  override getAllSources(): SourceIntegration[] {
+    // Get parent sources
+    const parentSources = super.getAllSources();
+    
+    // Filter out any sources that were overridden by custom ones
+    const filteredSources = parentSources.filter(source => 
+      !this.customSourceIds.has(source.id)
+    );
+    
+    // Combine with our custom sources
+    return [...filteredSources, ...this.customSources.values()];
   }
 }
