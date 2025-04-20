@@ -1,17 +1,35 @@
 // background.ts
-// Background script with simplified session tracking
+// Background script with extended source manager
 
 import { GitHubStoreClient } from 'gh-store-client';
 import { PaperManager } from './papers/manager';
 import { SessionService } from './utils/session-service';
 import { PopupManager } from './utils/popup-manager';
-import { SourceIntegrationManager } from './source-integration/source-manager';
+import { ExtendedSourceManager, SourcePattern } from './source-integration/source-manager-extension';
 import { loguru } from './utils/logger';
 import { PaperMetadata } from './papers/types';
 
-// Import source plugins directly
-import { arxivIntegration } from './source-integration/arxiv';
-import { Message } from './source-integration/types';
+// Default source patterns
+const DEFAULT_PATTERNS: SourcePattern[] = [
+  {
+    id: 'arxiv',
+    name: 'arXiv',
+    urlPattern: 'arxiv\\.org\\/(abs|pdf)\\/([0-9]+\\.[0-9]+)',
+    idRegex: 'arxiv\\.org\\/(abs|pdf)\\/([0-9]+\\.[0-9]+)'
+  },
+  {
+    id: 'doi',
+    name: 'DOI',
+    urlPattern: 'doi\\.org\\/([\\w\\.\\-\\/]+)',
+    idRegex: 'doi\\.org\\/([\\w\\.\\-\\/]+)'
+  },
+  {
+    id: 'paper',
+    name: 'Paper',
+    urlPattern: '.*\\/paper\\/([\\w-]+).*',
+    idRegex: '\\/paper\\/([\\w-]+)'
+  }
+];
 
 const logger = loguru.getLogger('background');
 
@@ -21,14 +39,15 @@ let githubRepo = '';
 let paperManager: PaperManager | null = null;
 let sessionService: SessionService | null = null;
 let popupManager: PopupManager | null = null;
-let sourceManager: SourceIntegrationManager | null = null;
+let sourceManager: ExtendedSourceManager | null = null;
 
 // Initialize sources
-function initializeSources() {
-  sourceManager = new SourceIntegrationManager();
+async function initializeSources() {
+  // Create extended source manager with default patterns
+  sourceManager = new ExtendedSourceManager(DEFAULT_PATTERNS);
   
-  // Register built-in sources directly
-  sourceManager.registerSource(arxivIntegration);
+  // Load patterns from storage
+  await sourceManager.loadPatternsFromStorage();
   
   logger.info('Source manager initialized');
   return sourceManager;
@@ -38,7 +57,7 @@ function initializeSources() {
 async function initialize() {
   try {
     // Initialize sources first
-    initializeSources();
+    await initializeSources();
     
     // Load GitHub credentials
     const items = await chrome.storage.sync.get(['githubToken', 'githubRepo']);
@@ -89,6 +108,12 @@ function setupMessageListeners() {
       return true;
     }
     
+    if (message.type === 'identifySource' && message.url) {
+      // Identify source for URL
+      handleIdentifySource(message.url, sendResponse);
+      return true; // Will respond asynchronously
+    }
+    
     if (message.type === 'paperMetadata' && message.metadata) {
       // Store metadata received from content script
       handlePaperMetadata(message.metadata);
@@ -113,6 +138,12 @@ function setupMessageListeners() {
       return true; // Will respond asynchronously
     }
     
+    if (message.type === 'saveNotes') {
+      logger.debug('Notes save requested:', message.notes);
+      handleSaveNotes(message.notes, sendResponse);
+      return true; // Will respond asynchronously
+    }
+    
     if (message.type === 'startSession') {
       handleStartSession(message.sourceId, message.paperId);
       sendResponse({ success: true });
@@ -131,7 +162,7 @@ function setupMessageListeners() {
       return true;
     }
 
-    // New handler for manual paper logging from popup
+    // Handler for manual paper logging from popup
     if (message.type === 'manualPaperLog' && message.metadata) {
       handleManualPaperLog(message.metadata)
         .then(() => sendResponse({ success: true }))
@@ -149,6 +180,41 @@ function setupMessageListeners() {
     
     return false; // Not handled
   });
+}
+
+// Handle source identification for URL
+function handleIdentifySource(url: string, sendResponse: (response: any) => void) {
+  if (!sourceManager) {
+    sendResponse({ 
+      success: false, 
+      error: 'Source manager not initialized'
+    });
+    return;
+  }
+  
+  try {
+    // Get paper ID from URL
+    const result = sourceManager.extractPaperId(url);
+    
+    if (result) {
+      sendResponse({
+        success: true,
+        sourceId: result.sourceId,
+        paperId: result.paperId
+      });
+    } else {
+      sendResponse({
+        success: false,
+        error: 'No matching source pattern for URL'
+      });
+    }
+  } catch (error) {
+    logger.error('Error identifying source for URL:', error);
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 }
 
 // Handle paper metadata from content script
@@ -191,19 +257,44 @@ async function handleUpdateRating(rating: string, sendResponse: (response: any) 
   }
 
   try {
-    await paperManager.updateRating(
-      session.sourceId,
-      session.paperId, 
-      rating,
-      metadata
-    );
-    
+    await paperManager.updateRating(session.sourceId, session.paperId, rating, metadata);
     // Update stored metadata with new rating
     metadata.rating = rating;
-    
     sendResponse({ success: true });
   } catch (error) {
     logger.error('Error updating rating:', error);
+    sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+}
+
+// Handle saving notes
+async function handleSaveNotes(notes: string, sendResponse: (response: any) => void) {
+  if (!paperManager || !sessionService) {
+    sendResponse({ success: false, error: 'Services not initialized' });
+    return;
+  }
+
+  const session = sessionService.getCurrentSession();
+  if (!session) {
+    sendResponse({ success: false, error: 'No current session' });
+    return;
+  }
+
+  const metadata = sessionService.getPaperMetadata();
+  if (!metadata) {
+    sendResponse({ success: false, error: 'No paper metadata available' });
+    return;
+  }
+
+  try {
+    await paperManager.logAnnotation(session.sourceId, session.paperId, 'notes', notes);
+    
+    // Update stored metadata with notes for this session
+    metadata.notes = notes;
+    
+    sendResponse({ success: true });
+  } catch (error) {
+    logger.error('Error saving notes:', error);
     sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 }
@@ -247,6 +338,7 @@ function handleEndSession(reason: string) {
   }
 }
 
+// Handle manual paper logging
 async function handleManualPaperLog(metadata: PaperMetadata): Promise<void> {
   logger.info(`Received manual paper log: ${metadata.sourceId}:${metadata.paperId}`);
   
@@ -267,7 +359,7 @@ async function handleManualPaperLog(metadata: PaperMetadata): Promise<void> {
   }
 }
 
-// Listen for credential changes
+// Listen for credential and pattern changes
 chrome.storage.onChanged.addListener(async (changes) => {
   logger.debug('Storage changes detected', Object.keys(changes));
   
@@ -276,6 +368,12 @@ chrome.storage.onChanged.addListener(async (changes) => {
   }
   if (changes.githubRepo) {
     githubRepo = changes.githubRepo.newValue;
+  }
+  
+  // Reload source patterns if they changed
+  if (changes.sourcePatterns && sourceManager) {
+    await sourceManager.handleStorageChanges(changes);
+    logger.info('Source patterns updated');
   }
   
   // Reinitialize paper manager if credentials changed
