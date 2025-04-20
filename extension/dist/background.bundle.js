@@ -62,12 +62,12 @@ class LoguruMock {
 // Export singleton instance
 const loguru = new LoguruMock();
 
-const logger$7 = loguru.getLogger('paper-manager');
+const logger$8 = loguru.getLogger('paper-manager');
 class PaperManager {
     constructor(client, sourceManager) {
         this.client = client;
         this.sourceManager = sourceManager;
-        logger$7.debug('Paper manager initialized');
+        logger$8.debug('Paper manager initialized');
     }
     /**
      * Get paper by source and ID
@@ -95,7 +95,7 @@ class PaperManager {
         try {
             const obj = await this.client.getObject(objectId);
             const data = obj.data;
-            logger$7.debug(`Retrieved existing paper: ${paperIdentifier}`);
+            logger$8.debug(`Retrieved existing paper: ${paperIdentifier}`);
             return data;
         }
         catch (error) {
@@ -107,7 +107,7 @@ class PaperManager {
                     rating: paperData.rating || 'novote'
                 };
                 const newobj = await this.client.createObject(objectId, defaultPaperData, ["TODO:hydrate-metadata"]);
-                logger$7.debug(`Created new paper: ${paperIdentifier}`);
+                logger$8.debug(`Created new paper: ${paperIdentifier}`);
                 // reopen to trigger metadata hydration
                 await this.client.fetchFromGitHub(`/issues/${newobj.meta.issueNumber}`, {
                     method: "PATCH",
@@ -140,7 +140,7 @@ class PaperManager {
                     interactions: []
                 };
                 await this.client.createObject(objectId, newLog);
-                logger$7.debug(`Created new interaction log: ${paperIdentifier}`);
+                logger$8.debug(`Created new interaction log: ${paperIdentifier}`);
                 return newLog;
             }
             throw error;
@@ -178,7 +178,7 @@ class PaperManager {
             data: session
         });
         const paperIdentifier = this.sourceManager.formatPaperId(sourceId, paperId);
-        logger$7.info(`Logged reading session for ${paperIdentifier}`, { duration: session.duration_seconds });
+        logger$8.info(`Logged reading session for ${paperIdentifier}`, { duration: session.duration_seconds });
     }
     /**
      * Log an annotation
@@ -206,7 +206,7 @@ class PaperManager {
             data: { key, value }
         });
         const paperIdentifier = this.sourceManager.formatPaperId(sourceId, paperId);
-        logger$7.info(`Logged annotation for ${paperIdentifier}`, { key });
+        logger$8.info(`Logged annotation for ${paperIdentifier}`, { key });
     }
     /**
      * Update paper rating
@@ -238,7 +238,7 @@ class PaperManager {
             data: { rating }
         });
         const paperIdentifier = this.sourceManager.formatPaperId(sourceId, paperId);
-        logger$7.info(`Updated rating for ${paperIdentifier} to ${rating}`);
+        logger$8.info(`Updated rating for ${paperIdentifier} to ${rating}`);
     }
     /**
      * Add interaction to log
@@ -252,7 +252,7 @@ class PaperManager {
 }
 
 // session-service.ts
-const logger$6 = loguru.getLogger('session-service');
+const logger$7 = loguru.getLogger('session-service');
 /**
  * Session tracking service for paper reading sessions
  *
@@ -270,7 +270,7 @@ class SessionService {
         this.paperMetadata = new Map();
         // Configuration
         this.HEARTBEAT_TIMEOUT = 15000; // 15 seconds
-        logger$6.debug('Session service initialized');
+        logger$7.debug('Session service initialized');
     }
     /**
      * Start a new session for a paper
@@ -290,11 +290,11 @@ class SessionService {
         if (metadata) {
             const key = `${sourceId}:${paperId}`;
             this.paperMetadata.set(key, metadata);
-            logger$6.debug(`Stored metadata for ${key}`);
+            logger$7.debug(`Stored metadata for ${key}`);
         }
         // Start timeout check
         this.scheduleTimeoutCheck();
-        logger$6.info(`Started session for ${sourceId}:${paperId}`);
+        logger$7.info(`Started session for ${sourceId}:${paperId}`);
     }
     /**
      * Record a heartbeat for the current session
@@ -308,7 +308,7 @@ class SessionService {
         // Reschedule timeout
         this.scheduleTimeoutCheck();
         if (this.activeSession.heartbeatCount % 12 === 0) { // Log every minute (12 x 5sec heartbeats)
-            logger$6.debug(`Session received ${this.activeSession.heartbeatCount} heartbeats`);
+            logger$7.debug(`Session received ${this.activeSession.heartbeatCount} heartbeats`);
         }
         return true;
     }
@@ -334,7 +334,7 @@ class SessionService {
         const now = Date.now();
         const lastTime = this.activeSession.lastHeartbeatTime.getTime();
         if ((now - lastTime) > this.HEARTBEAT_TIMEOUT) {
-            logger$6.info('Session timeout detected');
+            logger$7.info('Session timeout detected');
             this.endSession();
         }
         else {
@@ -378,9 +378,9 @@ class SessionService {
         if (this.paperManager && heartbeatCount > 0) {
             const metadata = this.getPaperMetadata(sourceId, paperId);
             this.paperManager.logReadingSession(sourceId, paperId, sessionData, metadata)
-                .catch(err => logger$6.error('Failed to store session', err));
+                .catch(err => logger$7.error('Failed to store session', err));
         }
-        logger$6.info(`Ended session for ${sourceId}:${paperId}`, {
+        logger$7.info(`Ended session for ${sourceId}:${paperId}`, {
             duration,
             heartbeats: heartbeatCount
         });
@@ -453,7 +453,7 @@ class SessionService {
 }
 
 // extension/utils/popup-manager.ts
-const logger$5 = loguru.getLogger('popup-manager');
+const logger$6 = loguru.getLogger('popup-manager');
 /**
  * Manages all popup-related functionality
  */
@@ -465,7 +465,7 @@ class PopupManager {
         this.sourceManagerProvider = sourceManagerProvider;
         this.paperManagerProvider = paperManagerProvider;
         this.setupMessageListeners();
-        logger$5.debug('Popup manager initialized');
+        logger$6.debug('Popup manager initialized');
     }
     /**
      * Set up message listeners for popup-related messages
@@ -477,7 +477,7 @@ class PopupManager {
                 this.handlePopupAction(message.sourceId, message.paperId, message.action, message.data).then(() => {
                     sendResponse({ success: true });
                 }).catch(error => {
-                    logger$5.error('Error handling popup action', error);
+                    logger$6.error('Error handling popup action', error);
                     sendResponse({
                         success: false,
                         error: error instanceof Error ? error.message : 'Unknown error'
@@ -490,7 +490,7 @@ class PopupManager {
                 this.handleShowAnnotationPopup(sender.tab.id, message.sourceId, message.paperId, message.position).then(() => {
                     sendResponse({ success: true });
                 }).catch(error => {
-                    logger$5.error('Error showing popup', error);
+                    logger$6.error('Error showing popup', error);
                     sendResponse({
                         success: false,
                         error: error instanceof Error ? error.message : 'Unknown error'
@@ -505,7 +505,7 @@ class PopupManager {
      * Handle a request to show an annotation popup
      */
     async handleShowAnnotationPopup(tabId, sourceId, paperId, position) {
-        logger$5.debug(`Showing annotation popup for ${sourceId}:${paperId}`);
+        logger$6.debug(`Showing annotation popup for ${sourceId}:${paperId}`);
         // Check if we have source and paper manager
         const sourceManager = this.sourceManagerProvider();
         const paperManager = this.paperManagerProvider();
@@ -543,10 +543,10 @@ class PopupManager {
                 position
             };
             await chrome.tabs.sendMessage(tabId, message);
-            logger$5.debug(`Sent popup to content script for ${sourceId}:${paperId}`);
+            logger$6.debug(`Sent popup to content script for ${sourceId}:${paperId}`);
         }
         catch (error) {
-            logger$5.error(`Error showing popup for ${sourceId}:${paperId}`, error);
+            logger$6.error(`Error showing popup for ${sourceId}:${paperId}`, error);
             throw error;
         }
     }
@@ -558,21 +558,21 @@ class PopupManager {
         if (!paperManager) {
             throw new Error('Paper manager not initialized');
         }
-        logger$5.debug(`Handling popup action: ${action}`, { sourceId, paperId });
+        logger$6.debug(`Handling popup action: ${action}`, { sourceId, paperId });
         try {
             if (action === 'rate') {
                 await paperManager.updateRating(sourceId, paperId, data.value);
-                logger$5.info(`Updated rating for ${sourceId}:${paperId} to ${data.value}`);
+                logger$6.info(`Updated rating for ${sourceId}:${paperId} to ${data.value}`);
             }
             else if (action === 'saveNotes') {
                 if (data.value) {
                     await paperManager.logAnnotation(sourceId, paperId, 'notes', data.value);
-                    logger$5.info(`Saved notes for ${sourceId}:${paperId}`);
+                    logger$6.info(`Saved notes for ${sourceId}:${paperId}`);
                 }
             }
         }
         catch (error) {
-            logger$5.error(`Error handling action ${action} for ${sourceId}:${paperId}`, error);
+            logger$6.error(`Error handling action ${action} for ${sourceId}:${paperId}`, error);
             throw error;
         }
     }
@@ -609,24 +609,24 @@ class PopupManager {
 }
 
 // extension/source-integration/source-manager.ts
-const logger$4 = loguru.getLogger('source-manager');
+const logger$5 = loguru.getLogger('source-manager');
 /**
  * Manages source integrations
  */
 class SourceIntegrationManager {
     constructor() {
         this.sources = new Map();
-        logger$4.info('Source integration manager initialized');
+        logger$5.info('Source integration manager initialized');
     }
     /**
      * Register a source integration
      */
     registerSource(source) {
         if (this.sources.has(source.id)) {
-            logger$4.warning(`Source with ID '${source.id}' already registered, overwriting`);
+            logger$5.warning(`Source with ID '${source.id}' already registered, overwriting`);
         }
         this.sources.set(source.id, source);
-        logger$4.info(`Registered source: ${source.name} (${source.id})`);
+        logger$5.info(`Registered source: ${source.name} (${source.id})`);
     }
     /**
      * Get all registered sources
@@ -640,11 +640,11 @@ class SourceIntegrationManager {
     getSourceForUrl(url) {
         for (const source of this.sources.values()) {
             if (source.canHandleUrl(url)) {
-                logger$4.debug(`Found source for URL '${url}': ${source.id}`);
+                logger$5.debug(`Found source for URL '${url}': ${source.id}`);
                 return source;
             }
         }
-        logger$4.debug(`No source found for URL: ${url}`);
+        logger$5.debug(`No source found for URL: ${url}`);
         return null;
     }
     /**
@@ -662,12 +662,12 @@ class SourceIntegrationManager {
             if (source.canHandleUrl(url)) {
                 const paperId = source.extractPaperId(url);
                 if (paperId) {
-                    logger$4.debug(`Extracted paper ID '${paperId}' from URL using ${source.id}`);
+                    logger$5.debug(`Extracted paper ID '${paperId}' from URL using ${source.id}`);
                     return { sourceId: source.id, paperId };
                 }
             }
         }
-        logger$4.debug(`Could not extract paper ID from URL: ${url}`);
+        logger$5.debug(`Could not extract paper ID from URL: ${url}`);
         return null;
     }
     /**
@@ -679,7 +679,7 @@ class SourceIntegrationManager {
             return source.formatPaperId(paperId);
         }
         // Fallback if source not found
-        logger$4.warning(`Source '${sourceId}' not found, using default format for paper ID`);
+        logger$5.warning(`Source '${sourceId}' not found, using default format for paper ID`);
         return `${sourceId}.${paperId}`;
     }
     /**
@@ -691,7 +691,7 @@ class SourceIntegrationManager {
             return source.formatObjectId(type, paperId);
         }
         // Fallback if source not found
-        logger$4.warning(`Source '${sourceId}' not found, using default format for object ID`);
+        logger$5.warning(`Source '${sourceId}' not found, using default format for object ID`);
         return `${type}:${sourceId}.${paperId}`;
     }
     /**
@@ -707,7 +707,7 @@ class SourceIntegrationManager {
 }
 
 // extension/utils/metadata-extractor.ts
-const logger$3 = loguru.getLogger('metadata-extractor');
+const logger$4 = loguru.getLogger('metadata-extractor');
 // Constants for standard source types
 const SOURCE_TYPES = {
     PDF: 'pdf',
@@ -724,7 +724,7 @@ class MetadataExtractor {
     constructor(document) {
         this.document = document;
         this.url = document.location.href;
-        logger$3.debug('Initialized metadata extractor for:', this.url);
+        logger$4.debug('Initialized metadata extractor for:', this.url);
     }
     /**
      * Helper method to get content from meta tags
@@ -737,7 +737,7 @@ class MetadataExtractor {
      * Extract and return all metadata fields
      */
     extract() {
-        logger$3.debug('Extracting metadata from page:', this.url);
+        logger$4.debug('Extracting metadata from page:', this.url);
         const metadata = {
             title: this.extractTitle(),
             authors: this.extractAuthors(),
@@ -748,7 +748,7 @@ class MetadataExtractor {
             tags: this.extractTags(),
             url: this.url
         };
-        logger$3.debug('Metadata extraction complete:', metadata);
+        logger$4.debug('Metadata extraction complete:', metadata);
         return metadata;
     }
     /**
@@ -904,7 +904,7 @@ function isPdfUrl(url) {
 }
 
 // extension/source-integration/base-source.ts
-const logger$2 = loguru.getLogger('base-source');
+const logger$3 = loguru.getLogger('base-source');
 /**
  * Base class for source integrations
  * Provides default implementations for all methods
@@ -947,7 +947,7 @@ class BaseSourceIntegration {
      */
     async extractMetadata(document, paperId) {
         try {
-            logger$2.debug(`Extracting metadata using base extractor for ID: ${paperId}`);
+            logger$3.debug(`Extracting metadata using base extractor for ID: ${paperId}`);
             // Create a metadata extractor for this document
             const extractor = this.createMetadataExtractor(document);
             // Extract metadata
@@ -974,7 +974,7 @@ class BaseSourceIntegration {
             };
         }
         catch (error) {
-            logger$2.error('Error extracting metadata with base extractor', error);
+            logger$3.error('Error extracting metadata with base extractor', error);
             return null;
         }
     }
@@ -997,7 +997,7 @@ class BaseSourceIntegration {
         // Try legacy format (sourceId:paperId)
         const legacyPrefix = `${this.id}:`;
         if (identifier.startsWith(legacyPrefix)) {
-            logger$2.debug(`Parsed legacy format identifier: ${identifier}`);
+            logger$3.debug(`Parsed legacy format identifier: ${identifier}`);
             return identifier.substring(legacyPrefix.length);
         }
         return null;
@@ -1011,56 +1011,190 @@ class BaseSourceIntegration {
     }
 }
 
-// extension/source-integration/arxiv/index.ts
-const logger$1 = loguru.getLogger('arxiv-integration');
+// source-integration/custom-source.ts
+const logger$2 = loguru.getLogger('custom-source');
 /**
- * ArXiv integration with custom metadata extraction
+ * Source integration that uses user-defined patterns
+ * We need to create a class that extends BaseSourceIntegration but allows
+ * modifying the properties that are read-only in the base class
  */
-class ArXivIntegration extends BaseSourceIntegration {
-    constructor() {
-        super(...arguments);
-        this.id = 'arxiv';
-        this.name = 'arXiv.org';
-        // URL patterns for papers
-        this.urlPatterns = [
-            /arxiv\.org\/(abs|pdf|html)\/([0-9.]+)/,
-            /arxiv\.org\/\w+\/([0-9.]+)/
-        ];
-        // Content script matches
-        this.contentScriptMatches = [
-            "*://*.arxiv.org/*"
-        ];
+class CustomSourceIntegration extends BaseSourceIntegration {
+    // Override the default properties with custom values
+    constructor(sourceId, sourceName, urlPatternString, idRegexString) {
+        super();
+        // Store our pattern strings
+        this._urlPatternString = urlPatternString;
+        this._idRegexString = idRegexString;
+        // Create a new object to bypass readonly properties
+        // We need to use Object.defineProperties to set readonly properties
+        Object.defineProperties(this, {
+            id: { value: sourceId },
+            name: { value: sourceName },
+            urlPatterns: { value: [new RegExp(urlPatternString, 'i')] },
+            contentScriptMatches: { value: ['<all_urls>'] }
+        });
+        logger$2.debug(`Created custom source: ${sourceId} with pattern: ${urlPatternString}`);
     }
     /**
-     * Extract paper ID from URL
+     * Extract paper ID using the provided regex pattern
      */
     extractPaperId(url) {
-        for (const pattern of this.urlPatterns) {
-            const match = url.match(pattern);
-            if (match) {
-                return match[2] || match[1]; // The capture group with the paper ID
+        try {
+            const idRegex = new RegExp(this._idRegexString, 'i');
+            const match = url.match(idRegex);
+            if (match && match.length > 1) {
+                // Use the first capture group as the paper ID
+                return match[1];
             }
+        }
+        catch (error) {
+            logger$2.error(`Error extracting paper ID for ${this.id}`, error);
+        }
+        // Fall back to the default implementation
+        return super.extractPaperId(url);
+    }
+    /**
+     * Extract metadata with some source-specific touches
+     */
+    async extractMetadata(document, paperId) {
+        // First use the base extractor
+        const baseMetadata = await super.extractMetadata(document, paperId);
+        // If we got metadata, add source-specific info
+        if (baseMetadata) {
+            // Add source name to tags if not present
+            if (!baseMetadata.tags.includes(this.name)) {
+                baseMetadata.tags.push(this.name);
+            }
+            logger$2.debug(`Extracted metadata for ${this.id}:${paperId}`);
+            return baseMetadata;
         }
         return null;
     }
+}
+
+// source-integration/source-manager-extension.ts
+const logger$1 = loguru.getLogger('source-manager-extension');
+/**
+ * Extends SourceIntegrationManager with user-defined pattern support
+ */
+class ExtendedSourceManager extends SourceIntegrationManager {
+    constructor(defaultPatterns = []) {
+        super();
+        // Default patterns to use if none are saved
+        this.defaultPatterns = [];
+        // Track which sources are custom (user-defined)
+        this.customSourceIds = new Set();
+        // We need to maintain our own map of sources since we can't access the private property
+        this.customSources = new Map();
+        this.defaultPatterns = defaultPatterns;
+        logger$1.info('Extended source manager initialized');
+    }
     /**
-     * Extract metadata from page or fetch from API
-     * Override parent method to handle the API fallback
+     * Load patterns from storage and register them
      */
-    async extractMetadata(document, paperId) {
-        logger$1.info(`Extracting metadata for arXiv ID: ${paperId}`);
-        // Try to extract from page first using our custom extractor
-        const pageMetadata = await super.extractMetadata(document, paperId);
-        // if (pageMetadata && pageMetadata.title && pageMetadata.authors) {
-        logger$1.debug('Extracted metadata from page');
-        return pageMetadata;
-        // }
+    async loadPatternsFromStorage() {
+        try {
+            const result = await chrome.storage.sync.get('sourcePatterns');
+            const patterns = result.sourcePatterns || this.defaultPatterns;
+            // Clear existing custom sources
+            this.clearCustomSources();
+            // Register all patterns
+            for (const pattern of patterns) {
+                this.registerCustomSource(pattern);
+            }
+            logger$1.info(`Loaded ${patterns.length} patterns from storage`);
+        }
+        catch (error) {
+            logger$1.error('Error loading patterns from storage', error);
+            // Register default patterns as fallback
+            for (const pattern of this.defaultPatterns) {
+                this.registerCustomSource(pattern);
+            }
+        }
+    }
+    /**
+     * Clear all custom sources
+     */
+    clearCustomSources() {
+        // Unregister all custom sources
+        for (const sourceId of this.customSourceIds) {
+            this.customSources.delete(sourceId);
+            // We can't directly remove from the parent's private sources map,
+            // but we can override it with a null handler in the next step
+            logger$1.debug(`Removed custom source: ${sourceId}`);
+        }
+        // Clear the set
+        this.customSourceIds.clear();
+    }
+    /**
+     * Register a custom source from a pattern
+     */
+    registerCustomSource(pattern) {
+        try {
+            // Create a source integration from pattern
+            const source = new CustomSourceIntegration(pattern.id, pattern.name, pattern.urlPattern, pattern.idRegex);
+            // Track this as a custom source
+            this.customSourceIds.add(pattern.id);
+            this.customSources.set(pattern.id, source);
+            // Register the source
+            this.registerSource(source);
+            logger$1.debug(`Registered custom source: ${pattern.id}`);
+        }
+        catch (error) {
+            logger$1.error(`Failed to register custom source: ${pattern.id}`, error);
+        }
+    }
+    /**
+     * Handle storage changes
+     */
+    async handleStorageChanges(changes) {
+        if (changes.sourcePatterns) {
+            logger$1.info('Source patterns changed, updating sources');
+            // Clear existing custom sources
+            this.clearCustomSources();
+            // Register new patterns
+            const patterns = changes.sourcePatterns.newValue || [];
+            for (const pattern of patterns) {
+                this.registerCustomSource(pattern);
+            }
+            logger$1.info(`Updated ${patterns.length} source patterns`);
+        }
+    }
+    /**
+     * Override getAllSources to combine built-in and custom sources
+     */
+    getAllSources() {
+        // Get parent sources
+        const parentSources = super.getAllSources();
+        // Filter out any sources that were overridden by custom ones
+        const filteredSources = parentSources.filter(source => !this.customSourceIds.has(source.id));
+        // Combine with our custom sources
+        return [...filteredSources, ...this.customSources.values()];
     }
 }
-// Export a singleton instance that can be used by both background and content scripts
-const arxivIntegration = new ArXivIntegration();
 
 // background.ts
+// Default source patterns
+const DEFAULT_PATTERNS = [
+    {
+        id: 'arxiv',
+        name: 'arXiv',
+        urlPattern: 'arxiv\\.org\\/(abs|pdf)\\/([0-9]+\\.[0-9]+)',
+        idRegex: 'arxiv\\.org\\/(abs|pdf)\\/([0-9]+\\.[0-9]+)'
+    },
+    {
+        id: 'doi',
+        name: 'DOI',
+        urlPattern: 'doi\\.org\\/([\\w\\.\\-\\/]+)',
+        idRegex: 'doi\\.org\\/([\\w\\.\\-\\/]+)'
+    },
+    {
+        id: 'paper',
+        name: 'Paper',
+        urlPattern: '.*\\/paper\\/([\\w-]+).*',
+        idRegex: '\\/paper\\/([\\w-]+)'
+    }
+];
 const logger = loguru.getLogger('background');
 // Global state
 let githubToken = '';
@@ -1070,10 +1204,11 @@ let sessionService = null;
 let popupManager = null;
 let sourceManager = null;
 // Initialize sources
-function initializeSources() {
-    sourceManager = new SourceIntegrationManager();
-    // Register built-in sources directly
-    sourceManager.registerSource(arxivIntegration);
+async function initializeSources() {
+    // Create extended source manager with default patterns
+    sourceManager = new ExtendedSourceManager(DEFAULT_PATTERNS);
+    // Load patterns from storage
+    await sourceManager.loadPatternsFromStorage();
     logger.info('Source manager initialized');
     return sourceManager;
 }
@@ -1081,7 +1216,7 @@ function initializeSources() {
 async function initialize() {
     try {
         // Initialize sources first
-        initializeSources();
+        await initializeSources();
         // Load GitHub credentials
         const items = await chrome.storage.sync.get(['githubToken', 'githubRepo']);
         githubToken = items.githubToken || '';
@@ -1121,6 +1256,11 @@ function setupMessageListeners() {
             sendResponse({ success: true });
             return true;
         }
+        if (message.type === 'identifySource' && message.url) {
+            // Identify source for URL
+            handleIdentifySource(message.url, sendResponse);
+            return true; // Will respond asynchronously
+        }
         if (message.type === 'paperMetadata' && message.metadata) {
             // Store metadata received from content script
             handlePaperMetadata(message.metadata);
@@ -1141,6 +1281,11 @@ function setupMessageListeners() {
             handleUpdateRating(message.rating, sendResponse);
             return true; // Will respond asynchronously
         }
+        if (message.type === 'saveNotes') {
+            logger.debug('Notes save requested:', message.notes);
+            handleSaveNotes(message.notes, sendResponse);
+            return true; // Will respond asynchronously
+        }
         if (message.type === 'startSession') {
             handleStartSession(message.sourceId, message.paperId);
             sendResponse({ success: true });
@@ -1156,7 +1301,7 @@ function setupMessageListeners() {
             sendResponse({ success: true });
             return true;
         }
-        // New handler for manual paper logging from popup
+        // Handler for manual paper logging from popup
         if (message.type === 'manualPaperLog' && message.metadata) {
             handleManualPaperLog(message.metadata)
                 .then(() => sendResponse({ success: true }))
@@ -1172,6 +1317,40 @@ function setupMessageListeners() {
         // Other message handlers are managed by PopupManager
         return false; // Not handled
     });
+}
+// Handle source identification for URL
+function handleIdentifySource(url, sendResponse) {
+    if (!sourceManager) {
+        sendResponse({
+            success: false,
+            error: 'Source manager not initialized'
+        });
+        return;
+    }
+    try {
+        // Get paper ID from URL
+        const result = sourceManager.extractPaperId(url);
+        if (result) {
+            sendResponse({
+                success: true,
+                sourceId: result.sourceId,
+                paperId: result.paperId
+            });
+        }
+        else {
+            sendResponse({
+                success: false,
+                error: 'No matching source pattern for URL'
+            });
+        }
+    }
+    catch (error) {
+        logger.error('Error identifying source for URL:', error);
+        sendResponse({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
 }
 // Handle paper metadata from content script
 async function handlePaperMetadata(metadata) {
@@ -1218,6 +1397,33 @@ async function handleUpdateRating(rating, sendResponse) {
         sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
 }
+// Handle saving notes
+async function handleSaveNotes(notes, sendResponse) {
+    if (!paperManager || !sessionService) {
+        sendResponse({ success: false, error: 'Services not initialized' });
+        return;
+    }
+    const session = sessionService.getCurrentSession();
+    if (!session) {
+        sendResponse({ success: false, error: 'No current session' });
+        return;
+    }
+    const metadata = sessionService.getPaperMetadata();
+    if (!metadata) {
+        sendResponse({ success: false, error: 'No paper metadata available' });
+        return;
+    }
+    try {
+        await paperManager.logAnnotation(session.sourceId, session.paperId, 'notes', notes);
+        // Update stored metadata with notes for this session
+        metadata.notes = notes;
+        sendResponse({ success: true });
+    }
+    catch (error) {
+        logger.error('Error saving notes:', error);
+        sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+}
 // Handle session start request
 function handleStartSession(sourceId, paperId) {
     if (!sessionService) {
@@ -1250,6 +1456,7 @@ function handleEndSession(reason) {
         sessionService.endSession();
     }
 }
+// Handle manual paper logging
 async function handleManualPaperLog(metadata) {
     logger.info(`Received manual paper log: ${metadata.sourceId}:${metadata.paperId}`);
     try {
@@ -1268,7 +1475,7 @@ async function handleManualPaperLog(metadata) {
         throw error;
     }
 }
-// Listen for credential changes
+// Listen for credential and pattern changes
 chrome.storage.onChanged.addListener(async (changes) => {
     logger.debug('Storage changes detected', Object.keys(changes));
     if (changes.githubToken) {
@@ -1276,6 +1483,11 @@ chrome.storage.onChanged.addListener(async (changes) => {
     }
     if (changes.githubRepo) {
         githubRepo = changes.githubRepo.newValue;
+    }
+    // Reload source patterns if they changed
+    if (changes.sourcePatterns && sourceManager) {
+        await sourceManager.handleStorageChanges(changes);
+        logger.info('Source patterns updated');
     }
     // Reinitialize paper manager if credentials changed
     if (changes.githubToken || changes.githubRepo) {
