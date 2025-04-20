@@ -223,7 +223,7 @@ function handleIdentifySource(url: string, sendResponse: (response: any) => void
         paperId: result.paperId
       });
     } else {
-      logger.warn(`No matching source pattern for URL: ${url}`);
+      logger.warning(`No matching source pattern for URL: ${url}`);
       sendResponse({
         success: false,
         error: 'No matching source pattern for URL'
