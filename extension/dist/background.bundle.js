@@ -1321,16 +1321,32 @@ function setupMessageListeners() {
 // Handle source identification for URL
 function handleIdentifySource(url, sendResponse) {
     if (!sourceManager) {
+        logger.error('Source manager not initialized');
         sendResponse({
             success: false,
             error: 'Source manager not initialized'
         });
         return;
     }
+    logger.debug(`Trying to identify source for URL: ${url}`);
     try {
+        // Log all sources and their patterns for debugging
+        const sources = sourceManager.getAllSources();
+        logger.debug(`Available sources: ${sources.map(s => s.id).join(', ')}`);
+        // Test each source against the URL for debugging
+        for (const source of sources) {
+            logger.debug(`Testing source ${source.id} against URL: ${url}`);
+            const canHandle = source.canHandleUrl(url);
+            logger.debug(`Source ${source.id} can handle URL: ${canHandle}`);
+            if (canHandle) {
+                const paperId = source.extractPaperId(url);
+                logger.debug(`Source ${source.id} extracted paper ID: ${paperId}`);
+            }
+        }
         // Get paper ID from URL
         const result = sourceManager.extractPaperId(url);
         if (result) {
+            logger.info(`Identified source for URL: ${url} as ${result.sourceId} with ID ${result.paperId}`);
             sendResponse({
                 success: true,
                 sourceId: result.sourceId,
@@ -1338,6 +1354,7 @@ function handleIdentifySource(url, sendResponse) {
             });
         }
         else {
+            logger.warning(`No matching source pattern for URL: ${url}`);
             sendResponse({
                 success: false,
                 error: 'No matching source pattern for URL'
@@ -1475,7 +1492,7 @@ async function handleManualPaperLog(metadata) {
         throw error;
     }
 }
-// Listen for credential and pattern changes
+// Modify the storage change handler to properly reload patterns
 chrome.storage.onChanged.addListener(async (changes) => {
     logger.debug('Storage changes detected', Object.keys(changes));
     if (changes.githubToken) {
@@ -1486,8 +1503,13 @@ chrome.storage.onChanged.addListener(async (changes) => {
     }
     // Reload source patterns if they changed
     if (changes.sourcePatterns && sourceManager) {
-        await sourceManager.handleStorageChanges(changes);
-        logger.info('Source patterns updated');
+        logger.info('Source patterns changed, reloading patterns');
+        // Force reload patterns from storage
+        await sourceManager.loadPatternsFromStorage();
+        logger.info('Source patterns reloaded successfully');
+        // Log the current sources to help debugging
+        const sources = sourceManager.getAllSources();
+        logger.info(`Current registered sources: ${sources.map(s => s.id).join(', ')}`);
     }
     // Reinitialize paper manager if credentials changed
     if (changes.githubToken || changes.githubRepo) {
