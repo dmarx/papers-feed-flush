@@ -6,22 +6,14 @@ import { SourceIntegration, Message } from './source-integration/types';
 import { PaperMetadata } from './papers/types';
 import { loguru } from './utils/logger';
 import { BaseSourceIntegration } from './source-integration/base-source';
-import { generatePaperIdFromUrl } from './utils/metadata-extractor';
+import { generatePaperIdFromUrl } from './source-integration/metadata-extractor';
 
-// Import source plugins directly
-import { arxivIntegration } from './source-integration/arxiv';
-//import { pdfIntegration } from './source-integration/pdf';
+// Import from registry instead of individual sources
+import { sourceIntegrations } from './source-integration/registry';
 
 const logger = loguru.getLogger('content-script');
 
 logger.info('Paper Tracker content script loaded');
-
-// Available source integrations
-const sourceIntegrations: SourceIntegration[] = [
-  arxivIntegration,
-  //pdfIntegration,
-  // Add more sources as they become available
-];
 
 // Base source for fallback processing
 const baseSource = new BaseSourceIntegration();
