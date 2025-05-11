@@ -2,30 +2,11 @@
 
 System which monitors what I'm reading via a browser extension and publishes a feed: https://dmarx.github.io/papers-feed/
 
-At present, only arxiv is supported, with plans to support other journals/sources in the future.
-
 # How it works
 
-**NB: YOU PROBABLY DON'T WANT TO CLONE *THIS* REPOSITORY.**
-
-This repository is my personal papers feed. The repository itself is used for data storage, and consequently is rather large.
-
-The system is comprised of the following components:
-
-* https://github.com/dmarx/papers-feed-src
-  - repository which contains most of the source code for this system
-* https://github.com/dmarx/papers-feed
-  - repository used as a data lake
-  - pulls in https://github.com/dmarx/papers-feed-src as a submodule
-* https://github.com/dmarx/papers-feed-src/tree/main/extension
-  * Browser extension which monitors my pageviewing activity
-  * When I interact with an arxiv URL, the browser extension logs the interaction to the data lake repo (here) by creating a github issue on it
-  * This is possible because I created a PAT narowly scoped to this repository which is registered in the extension's options
-* https://github.com/dmarx/papers-feed/.github/workflows
-  - Issues are processed by github actions workflows which invoke scripts installed from https://github.com/dmarx/papers-feed-src
-  - Data is persisted to https://github.com/dmarx/papers-feed/data
-* https://github.com/dmarx/papers-feed-src/src/scripts/frontend
-  - Aggregated results are injected into a simple webpage template which is hosted via github pages
+1. Browser extension monitors your reading habits
+2. Interactions with domains you are interested in get logged as github issues
+3. This triggers github automation workflows which publishes an interactive webpage to dig up papers
 
 # How to set this up to monitor your own reading
 
@@ -39,7 +20,7 @@ The system is comprised of the following components:
 
 To test that everything is set up correctly, visit an arxiv `/abs/` or `/pdf/` page. Shortly after visiting:
   * an issue with the label "paper" should be created
-  * opening that issue should trigger the process-events.yml workflow, which in turn should trigger but build-and-deploy.yml workflow. you should see these activities logged in the repository's `Actions` tab
+  * this should also trigger activity which will be logged in the repository's `Actions` tab
   * after a few minutes, the frontend should be available via gh-pages at `<username>.github.io/<repo-name>`
 
 # Acknowledgements
